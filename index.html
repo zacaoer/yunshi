@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>麦格纳斯陨石出现计时器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/hotkeys-js/dist/hotkeys.min.js"></script>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        warning: '#F59E0B',
+                        danger: '#EF4444',
+                        dark: '#1F2937',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .timer-pulse {
+                animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            }
+            .timer-shake {
+                animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+            }
+            .countdown-animate {
+                transition: all 0.5s ease-in-out;
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        @keyframes shake {
+            10%, 90% {
+                transform: translateX(-1px);
+            }
+            20%, 80% {
+                transform: translateX(2px);
+            }
+            30%, 50%, 70% {
+                transform: translateX(-4px);
+            }
+            40%, 60% {
+                transform: translateX(4px);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 to-slate-800 min-h-screen text-white flex flex-col items-center justify-center p-4">
+    <div class="w-full max-w-md bg-slate-800/50 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden border border-slate-700">
+        <header class="p-6 border-b border-slate-700">
+            <h1 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-teal-400">麦格纳斯陨石出现计时器</h1>
+            <p class="text-slate-400 text-center mt-2">每隔10秒倒数5秒，语音提示陨石出现</p>
+        </header>
+
+        <main class="p-6 space-y-6">
+            <div class="flex justify-center">
+                <div id="timer-display" class="text-[clamp(2.5rem,8vw,5rem)] font-bold text-center">
+                    <span id="main-time" class="text-primary">10</span>
+                    <span class="text-slate-500 text-[clamp(1rem,3vw,1.5rem)] ml-2">秒</span>
+                </div>
+            </div>
+               <div class="grid grid-cols-2 gap-4" style="display:none">
+                <div class="bg-slate-700/50 rounded-xl p-4 text-center">
+                    <p class="text-slate-400 text-sm">当前循环</p>
+                    <p id="current-cycle" class="text-[clamp(1.5rem,4vw,2.5rem)] font-bold text-secondary">0</p>
+                </div>
+                <div class="bg-slate-700/50 rounded-xl p-4 text-center">
+                    <p class="text-slate-400 text-sm">总循环数</p>
+                    <p class="text-[clamp(1.5rem,4vw,2.5rem)] font-bold text-slate-300">20</p>
+                </div>
+            </div>
+
+            <div id="status-container" class="h-12 flex items-center justify-center" style="display:none">
+                <p id="status-text" class="text-slate-300 text-center">等待开始...</p>
+            </div>
+
+            <div class="flex justify-center space-x-4 mt-8">
+                <button id="start-btn" class="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium rounded-lg shadow-lg transition-all duration-300 hover:shadow-xl transform hover:-translate-y-1 flex items-center">
+                    <i class="fa-solid fa-play mr-2"></i> 开始
+                </button>
+                <button id="reset-btn" class="px-6 py-3 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white font-medium rounded-lg shadow-lg transition-all duration-300 hover:shadow-xl transform hover:-translate-y-1 flex items-center" disabled>
+                    <i class="fa-solid fa-refresh mr-2"></i> 重置
+                </button>
+            </div>
+        </main>
+
+        <footer class="p-4 text-center text-slate-500 text-sm border-t border-slate-700" style="display:none">
+            <p>语音提示：倒计时和"注意陨石"</p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM 元素
+            const startBtn = document.getElementById('start-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const mainTimeEl = document.getElementById('main-time');
+            const currentCycleEl = document.getElementById('current-cycle');
+            const statusTextEl = document.getElementById('status-text');
+            const timerDisplayEl = document.getElementById('timer-display');
+
+            // 计时器状态
+            let mainTimer = 10;
+            let countdownTimer = 5;
+            let currentCycle = 0;
+            let totalCycles = 20;
+            let isRunning = false;
+            let mainInterval;
+            let countdownInterval;
+
+            // 语音合成
+            const speak = (text) => {
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = 'zh-CN';
+                    utterance.rate = 1;
+                    speechSynthesis.speak(utterance);
+                }
+            };
+
+            // 主计时器逻辑
+            const startMainTimer = () => {
+                statusTextEl.textContent = '准备中...';
+                timerDisplayEl.classList.remove('text-danger', 'timer-shake');
+                timerDisplayEl.classList.add('text-primary');
+                
+                mainInterval = setInterval(() => {
+                    mainTimer--;
+                    mainTimeEl.textContent = mainTimer;
+                    
+                    if (mainTimer <= 3) {
+                        mainTimeEl.classList.add('timer-pulse');
+                    }
+                    
+                    if (mainTimer <= 0) {
+                        clearInterval(mainInterval);
+                        startCountdown();
+                    }
+                }, 1000);
+            };
+
+            // 倒计时逻辑
+            const startCountdown = () => {
+                mainTimeEl.textContent = countdownTimer;
+                statusTextEl.textContent = '倒计时...';
+                timerDisplayEl.classList.remove('text-primary');
+                timerDisplayEl.classList.add('text-danger', 'timer-shake');
+                
+                countdownInterval = setInterval(() => {
+                    countdownTimer--;
+                    mainTimeEl.textContent = countdownTimer;
+                    
+                    // 语音播报倒计时
+                    if (countdownTimer > 0) {
+                        speak(countdownTimer.toString());
+                    }
+                    
+                    if (countdownTimer <= 0) {
+                        clearInterval(countdownInterval);
+                        handleCountdownEnd();
+                    }
+                }, 1000);
+            };
+
+            // 倒计时结束处理
+            const handleCountdownEnd = () => {
+                currentCycle++;
+                currentCycleEl.textContent = currentCycle;
+                statusTextEl.textContent = '注意陨石！';
+                
+                // 语音播报"注意陨石"
+                setTimeout(() => {
+                         speak('注意陨石');
+                },0);
+                
+                // 重置计时器
+                mainTimer = 10;
+                countdownTimer = 5;
+                
+                // 添加动画效果
+                timerDisplayEl.classList.remove('text-danger', 'timer-shake');
+                timerDisplayEl.classList.add('text-secondary', 'timer-pulse');
+                
+                // 检查是否完成所有循环
+                if (currentCycle >= totalCycles) {
+                    statusTextEl.textContent = '全部循环已完成！';
+                    isRunning = false;
+                    startBtn.textContent = '开始';
+                    startBtn.disabled = true;
+                    resetBtn.disabled = false;
+                    return;
+                }
+                
+                // 延迟后开始下一轮
+                setTimeout(() => {
+                    timerDisplayEl.classList.remove('text-secondary', 'timer-pulse');
+                    startMainTimer();
+                }, 0);
+            };
+
+            // 开始/暂停按钮点击事件
+            startBtn.addEventListener('click', () => {
+                if (!isRunning) {
+                    // 开始计时器
+                    isRunning = true;
+                    startBtn.innerHTML = '<i class="fa-solid fa-pause mr-2"></i> 暂停';
+                    resetBtn.disabled = false;
+                    
+                    if (currentCycle === 0) {
+                        // 首次启动
+                        startMainTimer();
+                    } else {
+                        // 恢复暂停
+                        if (mainTimer > 0) {
+                            startMainTimer();
+                        } else {
+                            startCountdown();
+                        }
+                    }
+                } else {
+                    // 暂停计时器
+                    isRunning = false;
+                    startBtn.innerHTML = '<i class="fa-solid fa-play mr-2"></i> 继续';
+                    clearInterval(mainInterval);
+                    clearInterval(countdownInterval);
+                }
+            });
+
+            // 重置按钮点击事件
+            resetBtn.addEventListener('click', () => {
+                // 重置所有状态
+                clearInterval(mainInterval);
+                clearInterval(countdownInterval);
+                
+                mainTimer = 10;
+                countdownTimer = 5;
+                currentCycle = 0;
+                isRunning = false;
+                
+                mainTimeEl.textContent = mainTimer;
+                currentCycleEl.textContent = currentCycle;
+                statusTextEl.textContent = '等待开始...';
+                
+                startBtn.innerHTML = '<i class="fa-solid fa-play mr-2"></i> 开始';
+                startBtn.disabled = false;
+                resetBtn.disabled = true;
+                
+                timerDisplayEl.classList.remove('text-danger', 'text-secondary', 'timer-pulse', 'timer-shake');
+                timerDisplayEl.classList.add('text-primary');
+            });
+       hotkeys('w', function(event, handler){
+          event.preventDefault();
+          startBtn.click();
+           })
+        });
+       
+    </script>
+</body>
+</html>
+    
