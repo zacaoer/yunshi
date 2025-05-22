@@ -130,6 +130,8 @@
             let mainInterval;
             let countdownInterval;
 
+            var voices1 = window.speechSynthesis.getVoices();
+
             // 语音合成
             const speak = (text) => {
                 if ('speechSynthesis' in window) {
@@ -138,7 +140,7 @@
                     utterance.rate = 1;
                     speechSynthesis.speak(utterance);
                 } else {
-                  window.alert("speechsynthesis is no")
+                  window.alert(voices1)
                 }
             };
 
